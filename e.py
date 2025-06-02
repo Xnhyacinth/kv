@@ -2,9 +2,9 @@ import os
 import json
 import random
 import argparse
-from torch.profiler import ProfilerActivity
-from torch.profiler import profile as torch_profile
-from torch.profiler import record_function
+# from torch.profiler import ProfilerActivity
+# from torch.profiler import profile as torch_profile
+# from torch.profiler import record_function
 import numpy as np
 from tqdm import tqdm
 from datasets import load_dataset
