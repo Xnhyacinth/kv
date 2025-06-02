@@ -14,7 +14,7 @@ output_length=${6:-"338"} # Support 128, 512, 1024, 2048, 4096, 8192, 16384
 # nbits=$8 # Quantization bit-width support 8,4,2. Need to set quant_method first.
 save_dir=${source_path}"results_long_bench" # path to result save_dir
 # run_longbench
-python3 -u ee.py \
+python3 -u e.py \
     --method ${method} \
     --model_path ${model_path} \
     --max_capacity_prompts ${max_capacity_prompts} \
