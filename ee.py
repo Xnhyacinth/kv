@@ -184,9 +184,9 @@ if __name__ == "__main__":
     print(f"Model inference time: {(et - st) / num_repeats * 1000} ms")
     print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
     # breakpoint()
-    # total_cpu_time = model_inference_event.cpu_time_total / 1000**2 / num_repeats
-    # total_cuda_time = model_inference_event.cuda_time / 1000**2 / num_repeats
-    # total_gflops = sum([event.flops for event in events]) / 1e9 / num_repeats
+    total_cpu_time = model_inference_event.cpu_time_total / 1000**2 / num_repeats
+    total_cuda_time = model_inference_event.cuda_time / 1000**2 / num_repeats
+    total_gflops = sum([event.flops for event in events]) / 1e9 / num_repeats
 
     result_dict = {
         # "instruction_length": instruction_length,
@@ -194,14 +194,14 @@ if __name__ == "__main__":
         "inference_method": args.method.lower(),
         "prompt_length": input_ids.shape[1],
         "generation_length": output_length,
-        "max_capacity_prompts": max_capacity_prompts[0],
-        "pruning_ratio": ratio[0],
+        "max_capacity_prompts": args.max_capacity_prompts,
+        "pruning_ratio": args.pruning_ratio,
         # "batch_size": batch_size,
         # "use_xrag": use_xrag,
         "inference_time": (et - st) / num_repeats * 1000,
-        # "cpu_time": total_cpu_time,
-        # "cuda_time": total_cuda_time,
-        # "gflops": total_gflops / output_length,
+        "cpu_time": total_cpu_time,
+        "cuda_time": total_cuda_time,
+        "gflops": total_gflops / output_length,
         "peak_mem": peak_mem_usage,
     }
     print(json.dumps(result_dict, indent=4))
