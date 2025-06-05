@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 from transformers.cache_utils import Cache
 
 def key_pruner_query_driven(kv_states, q_states, recent_size=128, ratio=0.3):
-    _, _, seqlen, head_dim = kv_states.shape
+    bsz, _, seqlen, head_dim = kv_states.shape
     k = int(head_dim * ratio)
     # new efficient implementation
     queries_norm = torch.pow(q_states[..., -32:, :], 2).mean(dim=2)
@@ -26,14 +26,14 @@ def key_pruner_query_driven(kv_states, q_states, recent_size=128, ratio=0.3):
     mask = mask.scatter_(-1, keep_idx, 1)                   
     mask_k = mask.unsqueeze(2).expand(-1, -1, seqlen - recent_size, -1)
 
-    return kv_states[:, :, :seqlen - recent_size, :][~mask_k].reshape(1,-1,seqlen - recent_size,head_dim-k), kv_states[:, :, seqlen - recent_size:, :], ~mask
+    return kv_states[:, :, :seqlen - recent_size, :][~mask_k].reshape(bsz,-1,seqlen - recent_size,head_dim-k), kv_states[:, :, seqlen - recent_size:, :], ~mask
 
 def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
     if tensor is not None and tensor.numel() > 0:
         return tensor.element_size() * tensor.nelement()
     return 0
 def key_pruner_query_driven_adaptive(keys, q_states, recent_size=128, ratio=0.3):
-    _, _, seqlen, head_dim = keys.shape
+    bsz, _, seqlen, head_dim = keys.shape
     queries = q_states[..., -recent_size:, :]
     del q_states
     # q_norm = torch.norm(queries, dim=-2, p=2).unsqueeze(-2)
@@ -82,7 +82,7 @@ def key_pruner_query_driven_adaptive(keys, q_states, recent_size=128, ratio=0.3)
     # cp.unpackbits
 
     # return keys[mask].view(1, -1, seqlen, topk), cp.packbits(cp.asarray(mask)), avg_scores, q_norm
-    return keys[mask].view(1, -1, seqlen, topk), np.packbits(mask.cpu().numpy(), axis=-1), avg_scores, q_norm
+    return keys[mask].view(bsz, -1, seqlen, topk), np.packbits(mask.cpu().numpy(), axis=-1), avg_scores, q_norm
 
 class DynamicCacheSplitHeadFlatten(Cache):
     '''
