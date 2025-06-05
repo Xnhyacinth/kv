@@ -168,10 +168,12 @@ if __name__ == "__main__":
         with_flops=True,
     ) as prof:
         with record_function("model_inference"):
+            torch.cuda.synchronize()
             st = time.time()
             for i in range(num_repeats):
                 outputs = model.generate(**inputs, max_new_tokens=output_length)
             et = time.time()
+            torch.cuda.synchronize()
             
 
     peak_mem_usage = torch.cuda.memory_stats()["allocated_bytes.all.peak"] / 2**30

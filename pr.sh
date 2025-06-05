@@ -14,37 +14,37 @@ for lin in "${ins[@]}"
         do
         echo "Running with input length: $lin and output length: $lout and batch size: $bs"
 
-        if [ ! -f "results/${bs}/results_long_bench/FullKV_0.5_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/FullKV_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 FullKV 0.5 128 $lin $lout $bs >  logs_bs/FullKV_0.5_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/SnapKV_0.5_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/SnapKV_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 SnapKV 0.5 128 $lin $lout $bs >  logs_bs/SnapKV_0.5_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/ThinK_0.5_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/ThinK_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 ThinK 0.5 128 $lin $lout $bs >  logs_bs/ThinK_0.5_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/AdaThinK_0.5_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/AdaThinK_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 AdaThinK 0.5 128 $lin $lout $bs >  logs_bs/AdaThinK_0.5_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/ThinK_0.8_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/ThinK_0.8_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 ThinK 0.8 128 $lin $lout $bs >  logs_bs/ThinK_0.8_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/AdaThinK_0.8_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/AdaThinK_0.8_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 AdaThinK 0.8 128 $lin $lout $bs >  logs_bs/AdaThinK_0.8_128_${lin}_${lout}_$bs.log
         fi
-        # if [ ! -f "results/${bs}/results_long_bench/SnapKV_0.5_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/SnapKV_0.5_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 SnapKV 0.5 512 $lin $lout $bs >  logs_bs/SnapKV_0.5_512_${lin}_${lout}_$bs.log
         # fi
-        # if [ ! -f "results/${bs}/results_long_bench/ThinK_0.5_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/ThinK_0.5_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 ThinK 0.5 512 $lin $lout $bs >  logs_bs/ThinK_0.5_512_${lin}_${lout}_$bs.log
         # fi
-        # if [ ! -f "results/${bs}/results_long_bench/AdaThinK_0.8_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/AdaThinK_0.8_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 AdaThinK 0.8 512 $lin $lout $bs >  logs_bs/AdaThinK_0.8_512_${lin}_${lout}_$bs.log
         # fi
-        # if [ ! -f "results/${bs}/results_long_bench/AdaThinK_0.5_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/AdaThinK_0.5_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 AdaThinK 0.5 512 $lin $lout $bs >  logs_bs/AdaThinK_0.5_512_${lin}_${lout}_$bs.log
         # fi
-        # if [ ! -f "results/${bs}/results_long_bench/ThinK_0.8_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/ThinK_0.8_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 ThinK 0.8 512 $lin $lout $bs >  logs_bs/ThinK_0.8_512_${lin}_${lout}_$bs.log
         # fi
         done
@@ -61,37 +61,37 @@ for lin in "${ins[@]}"
         do
         echo "Running with input length: $lin and output length: $lout and batch size: $bs"
 
-        if [ ! -f "results/${bs}/results_long_bench/FullKV_0.5_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/FullKV_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 FullKV 0.5 128 $lin $lout $bs >  logs_bs/FullKV_0.5_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/SnapKV_0.5_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/SnapKV_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 SnapKV 0.5 128 $lin $lout $bs >  logs_bs/SnapKV_0.5_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/ThinK_0.5_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/ThinK_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 ThinK 0.5 128 $lin $lout $bs >  logs_bs/ThinK_0.5_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/AdaThinK_0.5_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/AdaThinK_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 AdaThinK 0.5 128 $lin $lout $bs >  logs_bs/AdaThinK_0.5_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/ThinK_0.8_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/ThinK_0.8_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 ThinK 0.8 128 $lin $lout $bs >  logs_bs/ThinK_0.8_128_${lin}_${lout}_$bs.log
         fi
-        if [ ! -f "results/${bs}/results_long_bench/AdaThinK_0.8_128_${lin}_${lout}.json" ]; then
+        if [ ! -f "results_bs/${bs}/results_long_bench/AdaThinK_0.8_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/pro.sh 0 AdaThinK 0.8 128 $lin $lout $bs >  logs_bs/AdaThinK_0.8_128_${lin}_${lout}_$bs.log
         fi
-        # if [ ! -f "results/${bs}/results_long_bench/SnapKV_0.5_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/SnapKV_0.5_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 SnapKV 0.5 512 $lin $lout $bs >  logs_bs/SnapKV_0.5_512_${lin}_${lout}_$bs.log
         # fi
-        # if [ ! -f "results/${bs}/results_long_bench/ThinK_0.5_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/ThinK_0.5_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 ThinK 0.5 512 $lin $lout $bs >  logs_bs/ThinK_0.5_512_${lin}_${lout}_$bs.log
         # fi
-        # if [ ! -f "results/${bs}/results_long_bench/AdaThinK_0.8_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/AdaThinK_0.8_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 AdaThinK 0.8 512 $lin $lout $bs >  logs_bs/AdaThinK_0.8_512_${lin}_${lout}_$bs.log
         # fi
-        # if [ ! -f "results/${bs}/results_long_bench/AdaThinK_0.5_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/AdaThinK_0.5_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 AdaThinK 0.5 512 $lin $lout $bs >  logs_bs/AdaThinK_0.5_512_${lin}_${lout}_$bs.log
         # fi
-        # if [ ! -f "results/${bs}/results_long_bench/ThinK_0.8_512_${lin}_${lout}.json" ]; then
+        # if [ ! -f "results_bs/${bs}/results_long_bench/ThinK_0.8_512_${lin}_${lout}.json" ]; then
         #     bash scripts/scripts_longBench/pro.sh 0 ThinK 0.8 512 $lin $lout $bs >  logs_bs/ThinK_0.8_512_${lin}_${lout}_$bs.log
         # fi
         done
