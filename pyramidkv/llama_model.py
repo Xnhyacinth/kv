@@ -18,7 +18,7 @@ import math
 from flash_attn import flash_attn_func, flash_attn_varlen_func
 from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 from pyramidkv.pyramidkv_utils import DynamicCacheSplitHeadFlatten
-import numpy as np
+import cupy as cp
 
 logger = logging.get_logger(__name__)
 
