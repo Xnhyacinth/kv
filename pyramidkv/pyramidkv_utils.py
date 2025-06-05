@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import math
 
-import cupy as cp
+import numpy as np
 # from torch.utils.dlpack import to_dlpack
 # from cupy._core.dlpack import fromDlpack
 # from torch.utils.dlpack import from_dlpack
@@ -81,7 +81,8 @@ def key_pruner_query_driven_adaptive(keys, q_states, recent_size=128, ratio=0.3)
     # pack = cp.packbits(fromDlpack(to_dlpack(mask.byte().contiguous())))
     # cp.unpackbits
 
-    return keys[mask].view(1, -1, seqlen, topk), cp.packbits(cp.asarray(mask)), avg_scores, q_norm
+    # return keys[mask].view(1, -1, seqlen, topk), cp.packbits(cp.asarray(mask)), avg_scores, q_norm
+    return keys[mask].view(1, -1, seqlen, topk), np.packbits(mask.cpu().numpy(), axis=-1), avg_scores, q_norm
 
 class DynamicCacheSplitHeadFlatten(Cache):
     '''

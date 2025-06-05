@@ -18,7 +18,7 @@ import math
 from flash_attn import flash_attn_func, flash_attn_varlen_func
 from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
 from pyramidkv.pyramidkv_utils import DynamicCacheSplitHeadFlatten
-import cupy as cp
+import numpy as np
 
 logger = logging.get_logger(__name__)
 
@@ -102,7 +102,7 @@ def recover_keys(key_pruned, queries, mask, avg_scores):
     # For positions where mask is 0, copy values from key_pruned
     # We need to broadcast key_pruned to head_dim
     # mask = np.unpackbits(mask, axis=1)
-    mask = torch.as_tensor(cp.unpackbits(mask).reshape(bsz, -1, seq_len, head_dim), dtype=torch.bool, device=key_pruned.device)
+    mask = torch.as_tensor(np.unpackbits(mask).reshape(bsz, -1, seq_len, head_dim), dtype=torch.bool, device=key_pruned.device)
     zero_indices = (mask == 1).nonzero(as_tuple=False)  # Shape: (num_zeros, 4)
     recovered_keys[zero_indices[:, 0], zero_indices[:, 1], zero_indices[:, 2], zero_indices[:, 3]] = key_pruned.view(-1)
     # batch_idxs, head_idxs, seq_idxs, channel_idxs = zero_indices[:, 0], zero_indices[:, 1], zero_indices[:, 2], zero_indices[:, 3]
