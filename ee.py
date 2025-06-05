@@ -178,7 +178,7 @@ if __name__ == "__main__":
             model_inference_event = event
             break
     
-    
+    torch.cuda.empty_cache()
     print(args.method.lower())
     print(f"bs: {batch_size}, seqlen: {input_ids.shape[1]}+{output_length}\nmodel:{args.model_path}")
     print(f"Model inference time: {(et - st) / num_repeats * 1000} ms")

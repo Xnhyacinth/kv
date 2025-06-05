@@ -205,6 +205,7 @@ if __name__ == "__main__":
         used_mem = torch.cuda.max_memory_allocated()
         print(f'peak mem: {used_mem / 1024 ** 3} GB')
 
+    torch.cuda.empty_cache()
     result_dict = {
         # "instruction_length": instruction_length,
         # "document_length": document_length,

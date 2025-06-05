@@ -156,8 +156,6 @@ if __name__ == "__main__":
         context.append(string[:-1])
     inputs = tokenizer(context, padding="longest", return_tensors="pt", add_special_tokens=True).to('cuda')
     input_ids = inputs['input_ids']
-    
-
 
     model.eval()
 
@@ -183,9 +181,10 @@ if __name__ == "__main__":
             model_inference_event = event
             break
     
-    
+    torch.cuda.empty_cache()
     print(args.method.lower())
     print(f"bs: {batch_size}, seqlen: {input_ids.shape[1]}+{output_length}\nmodel:{args.model_path}")
+    print(f"input_ids shape: {input_ids.shape}, batch_size: {batch_size}, input_length: {input_ids.shape[1]}")
     print(f"Model inference time: {(et - st) / num_repeats * 1000} ms")
     print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
     # breakpoint()
