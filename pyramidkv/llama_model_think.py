@@ -15,74 +15,12 @@ from transformers.utils import (
 )
 from pyramidkv.pyramidkv_utils import init_pyramidkv,init_snapkv,init_CAM,init_H2O,init_StreamingLLM,init_l2norm, init_adakv, init_headkv, init_think
 import math
-from flash_attn import flash_attn_func, flash_attn_varlen_func
-from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input
+
 from pyramidkv.pyramidkv_utils import DynamicCacheSplitHeadFlatten
 import numpy as np
 
 logger = logging.get_logger(__name__)
 
-def _flash_attention_forward(
-    self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
-):
-    """
-    Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
-    first unpad the input, then computes the attention scores and pad the final attention scores.
-
-    Args:
-        query_states (`torch.Tensor`):
-            Input query states to be passed to Flash Attention API
-        key_states (`torch.Tensor`):
-            Input key states to be passed to Flash Attention API
-        value_states (`torch.Tensor`):
-            Input value states to be passed to Flash Attention API
-        attention_mask (`torch.Tensor`):
-            The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
-            position of padding tokens and 1 for the position of non-padding tokens.
-        dropout (`float`):
-            Attention dropout
-        softmax_scale (`float`, *optional*):
-            The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
-    """
-    if not self._flash_attn_uses_top_left_mask:
-        causal = self.is_causal
-    else:
-        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
-        causal = self.is_causal and query_length != 1
-
-    # Contains at least one padding token in the sequence
-    if attention_mask is not None:
-        batch_size = query_states.shape[0]
-        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
-            query_states, key_states, value_states, attention_mask, query_length
-        )
-
-        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
-
-        attn_output_unpad = flash_attn_varlen_func(
-            query_states,
-            key_states,
-            value_states,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_k,
-            max_seqlen_q=max_seqlen_in_batch_q,
-            max_seqlen_k=max_seqlen_in_batch_k,
-            dropout_p=dropout,
-            softmax_scale=softmax_scale,
-            causal=causal,
-        )
-
-        attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
-    else:
-        attn_output = flash_attn_func(
-            query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
-        )
-
-    # if self.layer_idx == 0:
-    #     import pdb; pdb.set_trace()
-
-    return attn_output
 
 def recover_keys(key_pruned, queries, mask, avg_scores):
     bsz, num_heads, seq_len, pruned_dim = key_pruned.shape
