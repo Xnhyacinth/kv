@@ -11,7 +11,7 @@
 # bash scripts/scripts_longBench/ee.sh 1 ThinK 0.8 128 24500 32 > logs/ThinK_0.8_128_24000_32.log
 # 53701 53667
 
-ins=(29000)
+ins=(28000)
 outs=(32 100 338 512)
 
 for lin in "${ins[@]}"
