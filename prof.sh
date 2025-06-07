@@ -2,8 +2,8 @@
 # PyramidKV, SnapKV, H2O, StreamingLLM, cam, L2Norm, thinK FullKV
 
 
-ins=(26000 20000 16000)
-outs=(32 100 338)
+ins=(25000 20000 16000)
+outs=(32 100 338 512)
 
 for lin in "${ins[@]}"
   do 
