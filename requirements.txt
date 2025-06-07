@@ -16,5 +16,5 @@ openai
 anthropic
 seaborn
 matplotlib
-
+einops
 # minference
