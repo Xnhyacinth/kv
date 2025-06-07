@@ -81,7 +81,8 @@ def key_pruner_query_driven_adaptive(keys, q_states, recent_size=128, ratio=0.3)
     # pack = cp.packbits(fromDlpack(to_dlpack(mask.byte().contiguous())))
     # cp.unpackbits
 
-    return keys[mask].view(bsz, -1, seqlen, topk), cp.packbits(cp.asarray(mask)), avg_scores, q_norm
+    return keys[mask].view(1, -1, seqlen, topk), mask, avg_scores, q_norm
+    # return keys[mask].view(bsz, -1, seqlen, topk), cp.packbits(cp.asarray(mask)), avg_scores, q_norm
     # return keys[mask].view(1, -1, seqlen, topk), np.packbits(mask.cpu().numpy(), axis=-1), avg_scores, q_norm
 
 class DynamicCacheSplitHeadFlatten(Cache):
@@ -455,7 +456,7 @@ class SnapKVCluster():
         assert key_states.shape[-2] == query_states.shape[-2]
         bsz, num_heads, q_len, head_dim = query_states.shape
 
-        print(f"Adathink max_capacity_prompt {self.max_capacity_prompt}")
+        # print(f"Adathink max_capacity_prompt {self.max_capacity_prompt}")
 
         if q_len < self.max_capacity_prompt:
             return key_states, value_states
