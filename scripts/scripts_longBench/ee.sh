@@ -5,7 +5,7 @@ pruning_ratio=${3:-"0.4"} # Support 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9
 max_capacity_prompts=${4:-"512"} # 128,2048 in paper
 attn_implementation=eager # Support "flash_attention_2", "sdpa", "eager".
 source_path=results/
-model_path="meta-llama/Llama-3.1-8B-Instruct"
+model_path="meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 input_length=${5:-"14000"} # Support 128, 512, 1024, 2048, 4096, 8192, 16384
 output_length=${6:-"338"} # Support 128, 512, 1024, 2048, 4096, 8192, 16384
