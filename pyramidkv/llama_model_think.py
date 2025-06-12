@@ -114,6 +114,7 @@ def recover_keys(key_pruned, queries, mask, avg_scores):
     # pos_mask = (mask.to_dense() == 0)  # Positions where mask is 1
     pos_mask = (mask == 0)
     recovered_keys[pos_mask] = new_values[pos_mask]
+    del mask, pos_mask, zero_indices, new_values, key_pruned
     # breakpoint()
     
     # Fill positions where mask == -1 with -new_values
@@ -294,6 +295,127 @@ def llama_attn_forward_SnapKV_AdaThinK(
     return attn_output, attn_weights, past_key_value
 
 
+def llama_flash_attn2_forward_SnapKV_AdaThinK(
+    self,
+    hidden_states: torch.Tensor,
+    attention_mask: Optional[torch.Tensor] = None,
+    position_ids: Optional[torch.LongTensor] = None,
+    past_key_value: Optional[Cache] = None,
+    output_attentions: bool = False,
+    use_cache: bool = False,
+    cache_position: Optional[torch.LongTensor] = None,
+    position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
+    **kwargs,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    bsz, q_len, _ = hidden_states.size()
+
+    init_think(self)
+    # LlamaFlashAttention2 attention does not support output_attentions
+    if "padding_mask" in kwargs:
+        warnings.warn(
+            "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+        )
+
+        # overwrite attention_mask with padding_mask
+        attention_mask = kwargs.pop("padding_mask")
+
+    output_attentions = False
+
+    bsz, q_len, _ = hidden_states.size()
+
+    query_states = self.q_proj(hidden_states)
+    key_states = self.k_proj(hidden_states)
+    value_states = self.v_proj(hidden_states)
+
+    # Flash attention requires the input to have the shape
+    # batch_size x seq_length x head_dim x hidden_dim
+    # therefore we just need to keep the original shape
+    query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+    key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+    value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+    
+    kv_seq_len = key_states.shape[-2]
+    # if past_key_value is not None:
+    #     kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+    if past_key_value is not None:
+        if self.layer_idx is None:
+            raise ValueError(
+                f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                "with a layer index."
+            )
+        if hasattr(self, "kv_seq_len"): #[SnapKV] add kv_seq_len
+            if self.kv_seq_len != 0:
+                kv_seq_len += self.kv_seq_len
+            else:
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        else:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+
+    cos, sin = self.rotary_emb(value_states, position_ids)
+    query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+    key_states = repeat_kv(key_states, self.num_key_value_groups)
+    value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+    if past_key_value is not None:
+        cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+        if key_states.shape[-2] == kv_seq_len:
+            self.kv_seq_len = kv_seq_len
+            kv_pruned, kv_recent, mask, value_states_compress = self.kv_cluster.update_think(key_states, query_states, value_states, attention_mask, self.num_key_value_groups)
+            past_key_value.update_think(kv_pruned, kv_recent, mask, value_states_compress, self.layer_idx, cache_kwargs)
+        else:
+            self.kv_seq_len += q_len
+            key_states, value_states, key_pruned, mask, avg_scores, queries = past_key_value.update_think(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states =  torch.cat([recover_keys(key_pruned, queries, mask, past_key_value.avg_scores[self.layer_idx]), key_states], dim=-2)
+        past_key_value._seen_tokens=self.kv_seq_len
+    # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+    # to be able to avoid many of these transpose/reshape/view.
+    query_states = query_states.transpose(1, 2)
+    key_states = key_states.transpose(1, 2)
+    value_states = value_states.transpose(1, 2)
+
+    dropout_rate = self.attention_dropout if self.training else 0.0
+
+    # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+    # therefore the input hidden states gets silently casted in float32. Hence, we need
+    # cast them back in the correct dtype just to be sure everything works as expected.
+    # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+    # in fp32. (LlamaRMSNorm handles it correctly)
+
+    input_dtype = query_states.dtype
+    if input_dtype == torch.float32:
+        if torch.is_autocast_enabled():
+            target_dtype = torch.get_autocast_gpu_dtype()
+        # Handle the case where the model is quantized
+        elif hasattr(self.config, "_pre_quantization_dtype"):
+            target_dtype = self.config._pre_quantization_dtype
+        else:
+            target_dtype = self.q_proj.weight.dtype
+
+        logger.warning_once(
+            f"The input hidden states seems to be silently casted in float32, this might be related to"
+            f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+            f" {target_dtype}."
+        )
+
+        query_states = query_states.to(target_dtype)
+        key_states = key_states.to(target_dtype)
+        value_states = value_states.to(target_dtype)
+
+    attn_output = _flash_attention_forward(
+        self, query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+    )
+
+    attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+    attn_output = self.o_proj(attn_output)
+
+    if not output_attentions:
+        attn_weights = None
+
+    return attn_output, attn_weights, past_key_value
+
+
 def llama_attn_forward_SnapKV_ThinK(
     self,
     hidden_states: torch.Tensor,
@@ -456,6 +578,139 @@ def llama_attn_forward_SnapKV_ThinK(
         attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
     else:
         attn_output = self.o_proj(attn_output)
+
+    if not output_attentions:
+        attn_weights = None
+
+    return attn_output, attn_weights, past_key_value
+
+
+def recover_cache(key_states_pruned, mask, layer_idx, ratio=0.4):
+    _, heads, head_dim  = mask.shape
+    k = head_dim - int(head_dim * ratio)
+    sqlen = int(key_states_pruned.shape[-1]/(k*heads))
+    mask = mask.unsqueeze(2).expand(-1, -1, sqlen, -1)
+    recovered_key_states = torch.zeros(1, heads, sqlen, head_dim, dtype=key_states_pruned.dtype, device = key_states_pruned.device)
+    recovered_key_states[mask] = key_states_pruned
+    del mask
+    return recovered_key_states
+
+def llama_flash_attn2_forward_SnapKV_ThinK(
+    self,
+    hidden_states: torch.Tensor,
+    attention_mask: Optional[torch.Tensor] = None,
+    position_ids: Optional[torch.LongTensor] = None,
+    past_key_value: Optional[Cache] = None,
+    output_attentions: bool = False,
+    use_cache: bool = False,
+    cache_position: Optional[torch.LongTensor] = None,
+    position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
+    **kwargs,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    bsz, q_len, _ = hidden_states.size()
+
+    init_think(self)
+    # LlamaFlashAttention2 attention does not support output_attentions
+    if "padding_mask" in kwargs:
+        warnings.warn(
+            "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+        )
+
+        # overwrite attention_mask with padding_mask
+        attention_mask = kwargs.pop("padding_mask")
+
+    output_attentions = False
+
+    bsz, q_len, _ = hidden_states.size()
+
+    query_states = self.q_proj(hidden_states)
+    key_states = self.k_proj(hidden_states)
+    value_states = self.v_proj(hidden_states)
+
+    # Flash attention requires the input to have the shape
+    # batch_size x seq_length x head_dim x hidden_dim
+    # therefore we just need to keep the original shape
+    query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+    key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+    value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+    
+    kv_seq_len = key_states.shape[-2]
+    # if past_key_value is not None:
+    #     kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+    if past_key_value is not None:
+        if self.layer_idx is None:
+            raise ValueError(
+                f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                "with a layer index."
+            )
+        if hasattr(self, "kv_seq_len"): #[SnapKV] add kv_seq_len
+            if self.kv_seq_len != 0:
+                kv_seq_len += self.kv_seq_len
+            else:
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        else:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+
+    cos, sin = self.rotary_emb(value_states, position_ids)
+    query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+    key_states = repeat_kv(key_states, self.num_key_value_groups)
+    value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+    if past_key_value is not None:
+        cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+        if key_states.shape[-2] == kv_seq_len:
+            self.kv_seq_len = kv_seq_len
+            kv_pruned, kv_recent, mask, value_states_compress = self.kv_cluster.update_think(key_states, query_states, value_states, attention_mask, self.num_key_value_groups)
+            past_key_value.update_think(kv_pruned, kv_recent, mask, value_states_compress, self.layer_idx, cache_kwargs)
+        else:
+            self.kv_seq_len += q_len
+            key_states, value_states, key_pruned, mask = past_key_value.update_flash_think(key_states, value_states, self.layer_idx, cache_kwargs)
+            recovered_key_states = recover_cache(key_pruned, mask, self.layer_idx, self.kv_cluster.ratio)
+            key_states = torch.cat([recovered_key_states, key_states], dim=-2)
+            del recovered_key_states
+        past_key_value._seen_tokens=self.kv_seq_len
+    # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+    # to be able to avoid many of these transpose/reshape/view.
+    query_states = query_states.transpose(1, 2)
+    key_states = key_states.transpose(1, 2)
+    value_states = value_states.transpose(1, 2)
+
+    dropout_rate = self.attention_dropout if self.training else 0.0
+
+    # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+    # therefore the input hidden states gets silently casted in float32. Hence, we need
+    # cast them back in the correct dtype just to be sure everything works as expected.
+    # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+    # in fp32. (LlamaRMSNorm handles it correctly)
+
+    input_dtype = query_states.dtype
+    if input_dtype == torch.float32:
+        if torch.is_autocast_enabled():
+            target_dtype = torch.get_autocast_gpu_dtype()
+        # Handle the case where the model is quantized
+        elif hasattr(self.config, "_pre_quantization_dtype"):
+            target_dtype = self.config._pre_quantization_dtype
+        else:
+            target_dtype = self.q_proj.weight.dtype
+
+        logger.warning_once(
+            f"The input hidden states seems to be silently casted in float32, this might be related to"
+            f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+            f" {target_dtype}."
+        )
+
+        query_states = query_states.to(target_dtype)
+        key_states = key_states.to(target_dtype)
+        value_states = value_states.to(target_dtype)
+
+    attn_output = _flash_attention_forward(
+        self, query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
+    )
+
+    attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+    attn_output = self.o_proj(attn_output)
 
     if not output_attentions:
         attn_weights = None
