@@ -61,9 +61,6 @@ for lin in "${ins[@]}"
         if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/AdaThinK_0.8_512_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/decode.sh 0 AdaThinK 0.8 512 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/AdaThinK_0.8_512_${lin}_${lout}.log
         fi
-        if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/FullKV_0.5_512_${lin}_${lout}.json" ]; then
-            bash scripts/scripts_longBench/decode.sh 0 FullKV 0.5 512 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/FullKV_0.5_512_${lin}_${lout}.log
-        fi
 
       done
   done

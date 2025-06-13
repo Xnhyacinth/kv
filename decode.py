@@ -171,7 +171,7 @@ if __name__ == "__main__":
     for i in range(3):
         outputs = model.generate(**inputs, max_new_tokens=output_length)
 
-    ttfts, latency, tpss = 0, 0, 0
+    ttfts, latency, tpss, latency_dec, tpss_dec = 0, 0, 0, 0, 0
     torch.cuda.reset_peak_memory_stats()
     with torch.no_grad():
         for i in range(num_repeats):
@@ -191,15 +191,24 @@ if __name__ == "__main__":
             num_generated_tokens = outputs.shape[1] - input_ids.shape[1]
 
             # latency per token (seconds/token)
-            latency_per_token = (total_time - ttft) / num_generated_tokens
+            latency_per_token_dec = (total_time - ttft) / num_generated_tokens
             # tokens per second
-            tps = num_generated_tokens / (total_time - ttft)
+            tps_dec = num_generated_tokens / (total_time - ttft)
+
+            # latency per token (seconds/token)
+            latency_per_token = total_time/ num_generated_tokens
+            # tokens per second
+            tps = num_generated_tokens / total_time
 
             ttfts += ttft
+            latency_dec += latency_per_token_dec
+            tpss_dec += tps_dec
             latency += latency_per_token
             tpss += tps
         
         ttft = ttfts / num_repeats
+        latency_dec = latency_dec / num_repeats
+        tpss_dec = tpss_dec / num_repeats
         latency = latency / num_repeats
         tpss = tpss / num_repeats
 
@@ -218,7 +227,10 @@ if __name__ == "__main__":
         "max_capacity_prompts": args.max_capacity_prompts,
         "pruning_ratio": args.pruning_ratio,
         "ttft": ttft * 1000,
+        "latency_per_token_dec": latency_dec * 1000,
         "latency_per_token": latency * 1000,
+        "inference_time": total_time * 1000,
+        "tps_dec": tpss_dec,
         "tps": tpss,
         "peak_mem": used_mem / 1024 ** 3,
     }
