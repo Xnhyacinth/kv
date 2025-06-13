@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from typing import List, Optional, Tuple, Union
 import torch.nn.functional as F
 import warnings
-from transformers.cache_utils import Cache, DynamicCache
+from transformers.cache_utils import Cache, DynamicCache, StaticCache
 from transformers.models.llama.modeling_llama import (
     apply_rotary_pos_emb,
     repeat_kv,
@@ -2709,7 +2709,7 @@ def llama_flash_attn2_forward_HeadKV(
     return attn_output, attn_weights, past_key_value
 
 
-from transformers.models.llama.modeling_llama import  StaticCache
+# from transformers.models.llama.modeling_llama import  StaticCache
 def _prepare_4d_causal_attention_mask_with_cache_position(
     attention_mask: torch.Tensor,
     sequence_length: int,
@@ -2761,6 +2761,7 @@ def _prepare_4d_causal_attention_mask_with_cache_position(
             )
 
     return causal_mask
+
 def prepare_inputs_for_generation_llama_new(
         self,
         input_ids,

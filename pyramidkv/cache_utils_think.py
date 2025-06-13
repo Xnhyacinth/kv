@@ -10,6 +10,7 @@ from packaging import version
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import is_hqq_available, is_quanto_available, is_torchdynamo_compiling, logging
+# from transformers.utils import is_hqq_available, is_optimum_quanto_available, is_torch_greater_or_equal, logging
 
 
 if is_quanto_available():

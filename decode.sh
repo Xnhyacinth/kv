@@ -11,13 +11,13 @@
 # bash scripts/scripts_longBench/decode.sh 0 ThinK 0.8 128 24500 32 > logs_dec/${model_name}/${attn_implementation}/ThinK_0.8_128_24000_32.log
 # 53701 53667
 
-ins=(3200 64000)
+ins=(8000 16000 32000 64000 128000)
 # ins=(12000 8192 4096)
 outs=(32 100 338 512)
-model_name="llama3-8b-inst"
+model_name=${1:-"llama3-8b-inst"}
 attn_implementation="flash_attention_2"
 # attn_implementation="eager"
-model_name="llama2-7b-chat"
+# model_name="llama2-7b-chat"
 
 mkdir -p logs_dec/${model_name}/${attn_implementation}
 for lin in "${ins[@]}"
@@ -42,9 +42,27 @@ for lin in "${ins[@]}"
         if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/FullKV_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/decode.sh 0 FullKV 0.5 128 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/FullKV_0.5_128_${lin}_${lout}.log
         fi
-
         if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/SnapKV_0.5_128_${lin}_${lout}.json" ]; then
             bash scripts/scripts_longBench/decode.sh 0 SnapKV 0.5 128 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/SnapKV_0.5_128_${lin}_${lout}.log
+        fi
+
+        if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/SnapKV_0.5_512_${lin}_${lout}.json" ]; then
+            bash scripts/scripts_longBench/decode.sh 0 SnapKV 0.5 512 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/SnapKV_0.5_512_${lin}_${lout}.log
+        fi
+        if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/ThinK_0.5_512_${lin}_${lout}.json" ]; then
+            bash scripts/scripts_longBench/decode.sh 0 ThinK 0.5 512 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/ThinK_0.5_512_${lin}_${lout}.log
+        fi
+        if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/AdaThinK_0.5_512_${lin}_${lout}.json" ]; then
+            bash scripts/scripts_longBench/decode.sh 0 AdaThinK 0.5 512 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/AdaThinK_0.5_512_${lin}_${lout}.log
+        fi
+        if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/ThinK_0.8_512_${lin}_${lout}.json" ]; then
+            bash scripts/scripts_longBench/decode.sh 0 ThinK 0.8 512 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/ThinK_0.8_512_${lin}_${lout}.log
+        fi
+        if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/AdaThinK_0.8_512_${lin}_${lout}.json" ]; then
+            bash scripts/scripts_longBench/decode.sh 0 AdaThinK 0.8 512 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/AdaThinK_0.8_512_${lin}_${lout}.log
+        fi
+        if [ ! -f "results_dec/${model_name}/${attn_implementation}/results_long_bench/FullKV_0.5_512_${lin}_${lout}.json" ]; then
+            bash scripts/scripts_longBench/decode.sh 0 FullKV 0.5 512 $lin $lout  ${model_name} ${attn_implementation} > logs_dec/${model_name}/${attn_implementation}/FullKV_0.5_512_${lin}_${lout}.log
         fi
 
       done
@@ -52,4 +70,4 @@ for lin in "${ins[@]}"
 
 
 
-python ../task/auto.py
+# python ../task/auto.py
