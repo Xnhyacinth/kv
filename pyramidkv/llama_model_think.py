@@ -102,7 +102,7 @@ def recover_keys(key_pruned, queries, mask, avg_scores):
     # For positions where mask is 0, copy values from key_pruned
     # We need to broadcast key_pruned to head_dim
     # mask = np.unpackbits(mask, axis=1)
-    # mask = torch.as_tensor(cp.unpackbits(mask).reshape(bsz, -1, seq_len, head_dim), dtype=torch.bool, device=key_pruned.device)
+    mask = torch.as_tensor(cp.unpackbits(mask).reshape(bsz, -1, seq_len, head_dim), dtype=torch.bool, device=key_pruned.device)
     zero_indices = (mask == 1).nonzero(as_tuple=False)  # Shape: (num_zeros, 4)
     recovered_keys[zero_indices[:, 0], zero_indices[:, 1], zero_indices[:, 2], zero_indices[:, 3]] = key_pruned.view(-1)
     # batch_idxs, head_idxs, seq_idxs, channel_idxs = zero_indices[:, 0], zero_indices[:, 1], zero_indices[:, 2], zero_indices[:, 3]
@@ -213,40 +213,40 @@ def llama_attn_forward_SnapKV_AdaThinK(
         past_key_value._seen_tokens = self.kv_seq_len
         
     # BEGIN: KV Cache Memory Usage Calculation
-    # if self.layer_idx == 0 and q_len == 1:
+    if self.layer_idx == 0 and q_len == 1:
         
-    #     current_layer_cache_memory_bytes = 0
+        current_layer_cache_memory_bytes = 0
 
-    #     def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
-    #         if tensor is not None and tensor.numel() > 0:
-    #             return tensor.element_size() * tensor.nelement()
-    #         return 0
+        def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
+            if tensor is not None and tensor.numel() > 0:
+                return tensor.element_size() * tensor.nelement()
+            return 0
 
-    #     cache_components = {
-    #         "key_cache_pruned": getattr(past_key_value, "key_cache_pruned", None),
-    #         "value_cache_compress": getattr(past_key_value, "value_cache_compress", None),
-    #         "mask": getattr(past_key_value, "mask", None),
-    #         "avg_scores": getattr(past_key_value, "avg_scores", None),
-    #         "queries": getattr(past_key_value, "queries", None),
-    #         "key_cache (recent)": getattr(past_key_value, "key_cache", None),      # For 'else' branch updates or other cache types
-    #         "value_cache (recent)": getattr(past_key_value, "value_cache", None),  # For 'else' branch updates or other cache types
-    #     }
+        cache_components = {
+            "key_cache_pruned": getattr(past_key_value, "key_cache_pruned", None),
+            "value_cache_compress": getattr(past_key_value, "value_cache_compress", None),
+            "mask": getattr(past_key_value, "mask", None),
+            "avg_scores": getattr(past_key_value, "avg_scores", None),
+            "queries": getattr(past_key_value, "queries", None),
+            "key_cache (recent)": getattr(past_key_value, "key_cache", None),      # For 'else' branch updates or other cache types
+            "value_cache (recent)": getattr(past_key_value, "value_cache", None),  # For 'else' branch updates or other cache types
+        }
 
-    #     component_memory_details = []
-    #     for name, component_list in cache_components.items():
-    #         if component_list is not None and self.layer_idx < len(component_list):
-    #             tensor = component_list[self.layer_idx]
-    #             # mem_bytes = get_tensor_memory_bytes(tensor).nbytes
-    #             mem_bytes = tensor.nbytes
-    #             if mem_bytes > 0:
-    #                 current_layer_cache_memory_bytes += mem_bytes
-    #                 component_memory_details.append(f"{name}: {mem_bytes / (1024**2):.3f} MB (shape: {tensor.shape}, dtype: {tensor.dtype})")
+        component_memory_details = []
+        for name, component_list in cache_components.items():
+            if component_list is not None and self.layer_idx < len(component_list):
+                tensor = component_list[self.layer_idx]
+                # mem_bytes = get_tensor_memory_bytes(tensor).nbytes
+                mem_bytes = tensor.nbytes
+                if mem_bytes > 0:
+                    current_layer_cache_memory_bytes += mem_bytes
+                    component_memory_details.append(f"{name}: {mem_bytes / (1024**2):.3f} MB (shape: {tensor.shape}, dtype: {tensor.dtype})")
         
-    #     if current_layer_cache_memory_bytes > 0:
-    #         print(f"[Layer {self.layer_idx}] KV Cache Memory at seq_len {past_key_value._seen_tokens}:")
-    #         for detail in component_memory_details:
-    #             print(f"  - {detail}")
-    #         print(f"  Total for Layer {self.layer_idx}: {current_layer_cache_memory_bytes / (1024**2):.3f} MB")
+        if current_layer_cache_memory_bytes > 0:
+            print(f"[Layer {self.layer_idx}] KV Cache Memory at seq_len {past_key_value._seen_tokens}:")
+            for detail in component_memory_details:
+                print(f"  - {detail}")
+            print(f"  Total for Layer {self.layer_idx}: {current_layer_cache_memory_bytes / (1024**2):.3f} MB")
     # END: KV Cache Memory Usage Calculation
 
     if query_states.shape[-2] == 1:
@@ -371,6 +371,45 @@ def llama_flash_attn2_forward_SnapKV_AdaThinK(
         past_key_value._seen_tokens=self.kv_seq_len
     # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
     # to be able to avoid many of these transpose/reshape/view.
+
+    # BEGIN: KV Cache Memory Usage Calculation
+    if self.layer_idx == 0 and q_len == 1:
+        
+        current_layer_cache_memory_bytes = 0
+
+        def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
+            if tensor is not None and tensor.numel() > 0:
+                return tensor.element_size() * tensor.nelement()
+            return 0
+
+        cache_components = {
+            "key_cache_pruned": getattr(past_key_value, "key_cache_pruned", None),
+            "value_cache_compress": getattr(past_key_value, "value_cache_compress", None),
+            "mask": getattr(past_key_value, "mask", None),
+            "avg_scores": getattr(past_key_value, "avg_scores", None),
+            "queries": getattr(past_key_value, "queries", None),
+            "key_cache (recent)": getattr(past_key_value, "key_cache", None),      # For 'else' branch updates or other cache types
+            "value_cache (recent)": getattr(past_key_value, "value_cache", None),  # For 'else' branch updates or other cache types
+        }
+
+        component_memory_details = []
+        for name, component_list in cache_components.items():
+            if component_list is not None and self.layer_idx < len(component_list):
+                tensor = component_list[self.layer_idx]
+                # mem_bytes = get_tensor_memory_bytes(tensor).nbytes
+                mem_bytes = tensor.nbytes
+                if mem_bytes > 0:
+                    current_layer_cache_memory_bytes += mem_bytes
+                    component_memory_details.append(f"{name}: {mem_bytes / (1024**2):.3f} MB (shape: {tensor.shape}, dtype: {tensor.dtype})")
+        
+        if current_layer_cache_memory_bytes > 0:
+            print(f"[Layer {self.layer_idx}] KV Cache Memory at seq_len {past_key_value._seen_tokens}:")
+            for detail in component_memory_details:
+                print(f"  - {detail}")
+            print(f"  Total for Layer {self.layer_idx}: {current_layer_cache_memory_bytes / (1024**2):.3f} MB")
+    # END: KV Cache Memory Usage Calculation
+
+
     query_states = query_states.transpose(1, 2)
     key_states = key_states.transpose(1, 2)
     value_states = value_states.transpose(1, 2)
@@ -504,40 +543,40 @@ def llama_attn_forward_SnapKV_ThinK(
         past_key_value._seen_tokens=self.kv_seq_len
 
     # BEGIN: KV Cache Memory Usage Calculation
-    # if self.layer_idx == 0 and q_len == 1:
+    if self.layer_idx == 0 and q_len == 1:
         
-    #     current_layer_cache_memory_bytes = 0
+        current_layer_cache_memory_bytes = 0
 
-    #     def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
-    #         if tensor is not None and tensor.numel() > 0:
-    #             return tensor.element_size() * tensor.nelement()
-    #         return 0
+        def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
+            if tensor is not None and tensor.numel() > 0:
+                return tensor.element_size() * tensor.nelement()
+            return 0
 
-    #     cache_components = {
-    #         "key_cache_pruned": getattr(past_key_value, "key_cache_pruned", None),
-    #         "value_cache_compress": getattr(past_key_value, "value_cache_compress", None),
-    #         "mask": getattr(past_key_value, "mask", None),
-    #         "avg_scores": getattr(past_key_value, "avg_scores", None),
-    #         "queries": getattr(past_key_value, "queries", None),
-    #         "key_cache (recent)": getattr(past_key_value, "key_cache", None),      # For 'else' branch updates or other cache types
-    #         "value_cache (recent)": getattr(past_key_value, "value_cache", None),  # For 'else' branch updates or other cache types
-    #     }
+        cache_components = {
+            "key_cache_pruned": getattr(past_key_value, "key_cache_pruned", None),
+            "value_cache_compress": getattr(past_key_value, "value_cache_compress", None),
+            "mask": getattr(past_key_value, "mask", None),
+            "avg_scores": getattr(past_key_value, "avg_scores", None),
+            "queries": getattr(past_key_value, "queries", None),
+            "key_cache (recent)": getattr(past_key_value, "key_cache", None),      # For 'else' branch updates or other cache types
+            "value_cache (recent)": getattr(past_key_value, "value_cache", None),  # For 'else' branch updates or other cache types
+        }
 
-    #     component_memory_details = []
-    #     for name, component_list in cache_components.items():
-    #         if component_list is not None and self.layer_idx < len(component_list):
-    #             tensor = component_list[self.layer_idx]
-    #             # mem_bytes = get_tensor_memory_bytes(tensor).nbytes
-    #             mem_bytes = tensor.nbytes
-    #             if mem_bytes > 0:
-    #                 current_layer_cache_memory_bytes += mem_bytes
-    #                 component_memory_details.append(f"{name}: {mem_bytes / (1024**2):.3f} MB (shape: {tensor.shape}, dtype: {tensor.dtype})")
+        component_memory_details = []
+        for name, component_list in cache_components.items():
+            if component_list is not None and self.layer_idx < len(component_list):
+                tensor = component_list[self.layer_idx]
+                # mem_bytes = get_tensor_memory_bytes(tensor).nbytes
+                mem_bytes = tensor.nbytes
+                if mem_bytes > 0:
+                    current_layer_cache_memory_bytes += mem_bytes
+                    component_memory_details.append(f"{name}: {mem_bytes / (1024**2):.3f} MB (shape: {tensor.shape}, dtype: {tensor.dtype})")
         
-    #     if current_layer_cache_memory_bytes > 0:
-    #         print(f"[Layer {self.layer_idx}] KV Cache Memory at seq_len {past_key_value._seen_tokens}:")
-    #         for detail in component_memory_details:
-    #             print(f"  - {detail}")
-    #         print(f"  Total for Layer {self.layer_idx}: {current_layer_cache_memory_bytes / (1024**2):.3f} MB")
+        if current_layer_cache_memory_bytes > 0:
+            print(f"[Layer {self.layer_idx}] KV Cache Memory at seq_len {past_key_value._seen_tokens}:")
+            for detail in component_memory_details:
+                print(f"  - {detail}")
+            print(f"  Total for Layer {self.layer_idx}: {current_layer_cache_memory_bytes / (1024**2):.3f} MB")
     # END: KV Cache Memory Usage Calculation
 
     if query_states.shape[-2] == 1:
@@ -592,8 +631,6 @@ def recover_cache(key_states_pruned, mask, layer_idx, ratio=0.4):
     sqlen = key_states_pruned.shape[-2]
     mask = mask.unsqueeze(2).expand(-1, -1, sqlen, -1)
     recovered_key_states = torch.zeros(1, heads, sqlen, head_dim, dtype=key_states_pruned.dtype, device = key_states_pruned.device)
-    print(recovered_key_states.shape)
-    print(key_states_pruned.shape)
     recovered_key_states[mask] = key_states_pruned.view(-1)
     del mask
     return recovered_key_states
@@ -676,6 +713,44 @@ def llama_flash_attn2_forward_SnapKV_ThinK(
         past_key_value._seen_tokens=self.kv_seq_len
     # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
     # to be able to avoid many of these transpose/reshape/view.
+
+    # BEGIN: KV Cache Memory Usage Calculation
+    if self.layer_idx == 0 and q_len == 1:
+        
+        current_layer_cache_memory_bytes = 0
+
+        def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
+            if tensor is not None and tensor.numel() > 0:
+                return tensor.element_size() * tensor.nelement()
+            return 0
+
+        cache_components = {
+            "key_cache_pruned": getattr(past_key_value, "key_cache_pruned", None),
+            "value_cache_compress": getattr(past_key_value, "value_cache_compress", None),
+            "mask": getattr(past_key_value, "mask", None),
+            "avg_scores": getattr(past_key_value, "avg_scores", None),
+            "queries": getattr(past_key_value, "queries", None),
+            "key_cache (recent)": getattr(past_key_value, "key_cache", None),      # For 'else' branch updates or other cache types
+            "value_cache (recent)": getattr(past_key_value, "value_cache", None),  # For 'else' branch updates or other cache types
+        }
+
+        component_memory_details = []
+        for name, component_list in cache_components.items():
+            if component_list is not None and self.layer_idx < len(component_list):
+                tensor = component_list[self.layer_idx]
+                # mem_bytes = get_tensor_memory_bytes(tensor).nbytes
+                mem_bytes = tensor.nbytes
+                if mem_bytes > 0:
+                    current_layer_cache_memory_bytes += mem_bytes
+                    component_memory_details.append(f"{name}: {mem_bytes / (1024**2):.3f} MB (shape: {tensor.shape}, dtype: {tensor.dtype})")
+        
+        if current_layer_cache_memory_bytes > 0:
+            print(f"[Layer {self.layer_idx}] KV Cache Memory at seq_len {past_key_value._seen_tokens}:")
+            for detail in component_memory_details:
+                print(f"  - {detail}")
+            print(f"  Total for Layer {self.layer_idx}: {current_layer_cache_memory_bytes / (1024**2):.3f} MB")
+    # END: KV Cache Memory Usage Calculation
+
     query_states = query_states.transpose(1, 2)
     key_states = key_states.transpose(1, 2)
     value_states = value_states.transpose(1, 2)
