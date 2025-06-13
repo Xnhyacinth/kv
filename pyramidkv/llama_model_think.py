@@ -26,6 +26,68 @@ import numpy as np
 logger = logging.get_logger(__name__)
 
 
+def _flash_attention_forward(
+    self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
+):
+    """
+    Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
+    first unpad the input, then computes the attention scores and pad the final attention scores.
+
+    Args:
+        query_states (`torch.Tensor`):
+            Input query states to be passed to Flash Attention API
+        key_states (`torch.Tensor`):
+            Input key states to be passed to Flash Attention API
+        value_states (`torch.Tensor`):
+            Input value states to be passed to Flash Attention API
+        attention_mask (`torch.Tensor`):
+            The padding mask - corresponds to a tensor of size `(batch_size, seq_len)` where 0 stands for the
+            position of padding tokens and 1 for the position of non-padding tokens.
+        dropout (`float`):
+            Attention dropout
+        softmax_scale (`float`, *optional*):
+            The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
+    """
+    if not self._flash_attn_uses_top_left_mask:
+        causal = self.is_causal
+    else:
+        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+        causal = self.is_causal and query_length != 1
+
+    # Contains at least one padding token in the sequence
+    if attention_mask is not None:
+        batch_size = query_states.shape[0]
+        query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+            query_states, key_states, value_states, attention_mask, query_length
+        )
+
+        cu_seqlens_q, cu_seqlens_k = cu_seq_lens
+        max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+
+        attn_output_unpad = flash_attn_varlen_func(
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens_q=cu_seqlens_q,
+            cu_seqlens_k=cu_seqlens_k,
+            max_seqlen_q=max_seqlen_in_batch_q,
+            max_seqlen_k=max_seqlen_in_batch_k,
+            dropout_p=dropout,
+            softmax_scale=softmax_scale,
+            causal=causal,
+        )
+
+        attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
+    else:
+        attn_output = flash_attn_func(
+            query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
+        )
+
+    # if self.layer_idx == 0:
+    #     import pdb; pdb.set_trace()
+
+    return attn_output
+
 def recover_keys(key_pruned, queries, mask, avg_scores):
     bsz, num_heads, seq_len, pruned_dim = key_pruned.shape
     head_dim = queries.shape[-1]
@@ -55,6 +117,7 @@ def recover_keys(key_pruned, queries, mask, avg_scores):
     # Fill positions where mask == 1 with new_values
     # pos_mask = (mask.to_dense() == 0)  # Positions where mask is 1
     pos_mask = (mask == 0)
+    del mask
     recovered_keys[pos_mask] = new_values[pos_mask]
     # breakpoint()
     
@@ -63,6 +126,16 @@ def recover_keys(key_pruned, queries, mask, avg_scores):
 
     return recovered_keys
 
+def recover_cache(key_states_pruned, mask, layer_idx, ratio=0.4):
+    _, heads, head_dim  = mask.shape
+    k = head_dim - int(head_dim * ratio)
+    # sqlen = int(key_states_pruned.shape[-1]/(k*heads))
+    sqlen = key_states_pruned.shape[-2]
+    mask = mask.unsqueeze(2).expand(-1, -1, sqlen, -1)
+    recovered_key_states = torch.zeros(1, heads, sqlen, head_dim, dtype=key_states_pruned.dtype, device = key_states_pruned.device)
+    recovered_key_states[mask] = key_states_pruned.view(-1)
+    del mask
+    return recovered_key_states
 
 def llama_flash_attn2_forward_SnapKV_AdaThinK(
     self,
@@ -140,6 +213,44 @@ def llama_flash_attn2_forward_SnapKV_AdaThinK(
         past_key_value._seen_tokens=self.kv_seq_len
     # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
     # to be able to avoid many of these transpose/reshape/view.
+
+    # BEGIN: KV Cache Memory Usage Calculation
+    if self.layer_idx == 0 and q_len == 1:
+        
+        current_layer_cache_memory_bytes = 0
+
+        def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
+            if tensor is not None and tensor.numel() > 0:
+                return tensor.element_size() * tensor.nelement()
+            return 0
+
+        cache_components = {
+            "key_cache_pruned": getattr(past_key_value, "key_cache_pruned", None),
+            "value_cache_compress": getattr(past_key_value, "value_cache_compress", None),
+            "mask": getattr(past_key_value, "mask", None),
+            "avg_scores": getattr(past_key_value, "avg_scores", None),
+            "queries": getattr(past_key_value, "queries", None),
+            "key_cache (recent)": getattr(past_key_value, "key_cache", None),      # For 'else' branch updates or other cache types
+            "value_cache (recent)": getattr(past_key_value, "value_cache", None),  # For 'else' branch updates or other cache types
+        }
+
+        component_memory_details = []
+        for name, component_list in cache_components.items():
+            if component_list is not None and self.layer_idx < len(component_list):
+                tensor = component_list[self.layer_idx]
+                # mem_bytes = get_tensor_memory_bytes(tensor).nbytes
+                mem_bytes = tensor.nbytes
+                if mem_bytes > 0:
+                    current_layer_cache_memory_bytes += mem_bytes
+                    component_memory_details.append(f"{name}: {mem_bytes / (1024**2):.3f} MB (shape: {tensor.shape}, dtype: {tensor.dtype})")
+        
+        if current_layer_cache_memory_bytes > 0:
+            print(f"[Layer {self.layer_idx}] KV Cache Memory at seq_len {past_key_value._seen_tokens}:")
+            for detail in component_memory_details:
+                print(f"  - {detail}")
+            print(f"  Total for Layer {self.layer_idx}: {current_layer_cache_memory_bytes / (1024**2):.3f} MB")
+    # END: KV Cache Memory Usage Calculation
+
     query_states = query_states.transpose(1, 2)
     key_states = key_states.transpose(1, 2)
     value_states = value_states.transpose(1, 2)
@@ -434,6 +545,45 @@ def llama_flash_attn2_forward_SnapKV_ThinK(
         past_key_value._seen_tokens=self.kv_seq_len
     # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
     # to be able to avoid many of these transpose/reshape/view.
+
+    # BEGIN: KV Cache Memory Usage Calculation
+    if self.layer_idx == 0 and q_len == 1:
+        
+        current_layer_cache_memory_bytes = 0
+
+        def get_tensor_memory_bytes(tensor: torch.Tensor) -> int:
+            if tensor is not None and tensor.numel() > 0:
+                return tensor.element_size() * tensor.nelement()
+            return 0
+
+        cache_components = {
+            "key_cache_pruned": getattr(past_key_value, "key_cache_pruned", None),
+            "value_cache_compress": getattr(past_key_value, "value_cache_compress", None),
+            "mask": getattr(past_key_value, "mask", None),
+            "avg_scores": getattr(past_key_value, "avg_scores", None),
+            "queries": getattr(past_key_value, "queries", None),
+            "key_cache (recent)": getattr(past_key_value, "key_cache", None),      # For 'else' branch updates or other cache types
+            "value_cache (recent)": getattr(past_key_value, "value_cache", None),  # For 'else' branch updates or other cache types
+        }
+
+        component_memory_details = []
+        for name, component_list in cache_components.items():
+            if component_list is not None and self.layer_idx < len(component_list):
+                tensor = component_list[self.layer_idx]
+                # mem_bytes = get_tensor_memory_bytes(tensor).nbytes
+                mem_bytes = tensor.nbytes
+                if mem_bytes > 0:
+                    current_layer_cache_memory_bytes += mem_bytes
+                    component_memory_details.append(f"{name}: {mem_bytes / (1024**2):.3f} MB (shape: {tensor.shape}, dtype: {tensor.dtype})")
+        
+        if current_layer_cache_memory_bytes > 0:
+            print(f"[Layer {self.layer_idx}] KV Cache Memory at seq_len {past_key_value._seen_tokens}:")
+            for detail in component_memory_details:
+                print(f"  - {detail}")
+            print(f"  Total for Layer {self.layer_idx}: {current_layer_cache_memory_bytes / (1024**2):.3f} MB")
+    # END: KV Cache Memory Usage Calculation
+
+
     query_states = query_states.transpose(1, 2)
     key_states = key_states.transpose(1, 2)
     value_states = value_states.transpose(1, 2)

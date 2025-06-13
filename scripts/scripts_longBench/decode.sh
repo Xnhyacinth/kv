@@ -30,7 +30,7 @@ source_path=results_dec/${model}/${attn_implementation}/
 # nbits=$8 # Quantization bit-width support 8,4,2. Need to set quant_method first.
 save_dir=${source_path}"results_long_bench" # path to result save_dir
 # run_longbench
-python3 -u ee.py \
+python3 -u decode.py \
     --method ${method} \
     --model_path ${model_path} \
     --max_capacity_prompts ${max_capacity_prompts} \
