@@ -91,8 +91,9 @@ def replace_llama(method, model_name=None):
 
     elif method == "fullkv":
         print("Using FullKV!")
-        # from pyramidkv.llama_model import fullkv_attn_forward
-        # transformers.models.llama.modeling_llama.LlamaAttention.forward = fullkv_attn_forward
+        from pyramidkv.llama_model import fullkv_attn_forward, fullkv_flashattn_forward
+        transformers.models.llama.modeling_llama.LlamaAttention.forward = fullkv_attn_forward
+        transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward = fullkv_flashattn_forward
 
     if method not in ["fullkv"]:
         transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation = prepare_inputs_for_generation_llama_new
