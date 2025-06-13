@@ -2,9 +2,9 @@ import os
 import json
 import random
 import argparse
-from torch.profiler import ProfilerActivity
-from torch.profiler import profile as torch_profile
-from torch.profiler import record_function
+# from torch.profiler import ProfilerActivity
+# from torch.profiler import profile as torch_profile
+# from torch.profiler import record_function
 import numpy as np
 from tqdm import tqdm
 from datasets import load_dataset
@@ -75,9 +75,10 @@ if __name__ == "__main__":
     from pyramidkv.monkeypatch import replace_llama,replace_mistral
     replace_llama(args.method.lower())
     replace_mistral(args.method.lower())
+
     model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
-        torch_dtype=torch.float16,
+        torch_dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
         device_map="auto",
         use_cache=args.use_cache,
@@ -151,60 +152,87 @@ if __name__ == "__main__":
     output_length = args.output_length
     num_repeats = 5
     for _ in range(batch_size):
-        string = 't,' * (prompt_length // 2)
+        string = 'who are you? ' * (prompt_length // 4)
+        string = 't, ' * (prompt_length // 2)
         context.append(string[:-1])
+    # vocab_keys = list(tokenizer.get_vocab().keys())
+    # for _ in range(batch_size):
+    #     chosen_words = random.choices(vocab_keys, k=prompt_length)
+    #     current_context_string = " ".join(chosen_words)
+    #     context.append(current_context_string)
     inputs = tokenizer(context, padding="longest", return_tensors="pt", add_special_tokens=True).to('cuda')
     input_ids = inputs['input_ids']
-    
+    print("Input IDs shape:", input_ids.shape)
 
 
     model.eval()
-    torch.cuda.reset_peak_memory_stats(model.device)
-    with torch_profile(
-        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-        with_flops=True,
-    ) as prof:
-        with record_function("model_inference"):
-            torch.cuda.synchronize()
-            st = time.time()
-            for i in range(num_repeats):
-                outputs = model.generate(**inputs, max_new_tokens=output_length)
-            et = time.time()
-            torch.cuda.synchronize()
-            
 
-    peak_mem_usage = torch.cuda.memory_stats()["allocated_bytes.all.peak"] / 2**30
-    events = prof.key_averages()
-    for event in events:
-        if event.key == "model_inference":
-            model_inference_event = event
-            break
-    
+    # warm up
+    for i in range(3):
+        outputs = model.generate(**inputs, max_new_tokens=output_length)
+
+    ttfts, latency, tpss, latency_dec, tpss_dec = 0, 0, 0, 0, 0
+    torch.cuda.reset_peak_memory_stats()
+    with torch.no_grad():
+        for i in range(num_repeats):
+
+            torch.cuda.synchronize()
+            start_time = time.time()
+            _ = model.generate(**inputs, max_new_tokens=1)
+            torch.cuda.synchronize()
+            ttft = time.time() - start_time
+
+            torch.cuda.synchronize()
+            start_time = time.time()
+            outputs = model.generate(**inputs, max_new_tokens=output_length)
+            torch.cuda.synchronize()
+            total_time = time.time() - start_time
+
+            num_generated_tokens = outputs.shape[1] - input_ids.shape[1]
+
+            # latency per token (seconds/token)
+            latency_per_token_dec = (total_time - ttft) / num_generated_tokens
+            # tokens per second
+            tps_dec = num_generated_tokens / (total_time - ttft)
+
+            # latency per token (seconds/token)
+            latency_per_token = total_time/ num_generated_tokens
+            # tokens per second
+            tps = num_generated_tokens / total_time
+
+            ttfts += ttft
+            latency_dec += latency_per_token_dec
+            tpss_dec += tps_dec
+            latency += latency_per_token
+            tpss += tps
+        
+        ttft = ttfts / num_repeats
+        latency_dec = latency_dec / num_repeats
+        tpss_dec = tpss_dec / num_repeats
+        latency = latency / num_repeats
+        tpss = tpss / num_repeats
+
+        print(f'Average ttft: {ttft * 1000:.2f} ms')
+        print(f'Average latency per token: {latency * 1000:.2f} ms')
+        print(f'Average tps: {tpss:.2f} tokens/s')
+
+        used_mem = torch.cuda.max_memory_allocated()
+        print(f'peak mem: {used_mem / 1024 ** 3} GB')
+
     torch.cuda.empty_cache()
-    print(args.method.lower())
-    print(f"bs: {batch_size}, seqlen: {input_ids.shape[1]}+{output_length}\nmodel:{args.model_path}")
-    print(f"Model inference time: {(et - st) / num_repeats * 1000} ms")
-    print(prof.key_averages().table(sort_by="self_cpu_time_total", row_limit=10))
-    # breakpoint()
-    total_cpu_time = model_inference_event.cpu_time_total / 1000**2 / num_repeats
-    total_cuda_time = model_inference_event.cuda_time / 1000**2 / num_repeats
-    total_gflops = sum([event.flops for event in events]) / 1e9 / num_repeats
-
     result_dict = {
-        # "instruction_length": instruction_length,
-        # "document_length": document_length,
         "inference_method": args.method.lower(),
         "prompt_length": input_ids.shape[1],
         "generation_length": output_length,
         "max_capacity_prompts": args.max_capacity_prompts,
         "pruning_ratio": args.pruning_ratio,
-        # "batch_size": batch_size,
-        # "use_xrag": use_xrag,
-        "inference_time": (et - st) / num_repeats * 1000,
-        "cpu_time": total_cpu_time,
-        "cuda_time": total_cuda_time,
-        "gflops": total_gflops / output_length,
-        "peak_mem": peak_mem_usage,
+        "ttft": ttft * 1000,
+        "latency_per_token_dec": latency_dec * 1000,
+        "latency_per_token": latency * 1000,
+        "inference_time": total_time * 1000,
+        "tps_dec": tpss_dec,
+        "tps": tpss,
+        "peak_mem": used_mem / 1024 ** 3,
     }
     print(json.dumps(result_dict, indent=4))
 
@@ -212,15 +240,6 @@ if __name__ == "__main__":
         json.dump(result_dict, f, indent=4)
 
     # breakpoint()
-#     torch.cuda.reset_peak_memory_stats()
-#     with torch.no_grad():
-#         torch.cuda.synchronize()
-#         st = time.time()
-#         for i in range(num_repeats):
-#             outputs = model.generate(**inputs, max_new_tokens=output_length)
-#         torch.cuda.synchronize()
-#         print(f'used time: {(time.time() - st) / num_repeats * 1000} ms')
-#         used_mem = torch.cuda.max_memory_allocated()
-#         print(f'peak mem: {used_mem / 1024 ** 3} GB')
+   
 # used time: 21405.880848566692 ms
 # peak mem: 15.506203174591064 GB

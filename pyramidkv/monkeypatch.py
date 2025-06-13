@@ -5,7 +5,7 @@ from pyramidkv.llama_model import llama_flash_attn2_forward_HeadKV, llama_flash_
 from pyramidkv.llama_model import llama_attn_forward_PyramidKV,llama_attn_forward_CAM,llama_attn_forward_H2O,llama_attn_forward_SnapKV,llama_attn_forward_StreamingLLM, llama_attn_forward_L2Norm
 from pyramidkv.llama_model import llama_sdpa_attn_forward_PyramidKV,llama_sdpa_attn_forward_CAM,llama_sdpa_attn_forward_H2O,llama_sdpa_attn_forward_SnapKV,llama_sdpa_attn_forward_StreamingLLM, llama_sdpa_attn_forward_L2Norm
 from pyramidkv.llama_model import adaptive_LlamaModel_forward
-from pyramidkv.llama_model_think import llama_attn_forward_SnapKV_ThinK, think_model_forward, llama_attn_forward_SnapKV_AdaThinK, adathink_model_forward
+from pyramidkv.llama_model_think import llama_attn_forward_SnapKV_ThinK, think_model_forward, llama_attn_forward_SnapKV_AdaThinK, adathink_model_forward, llama_flash_attn2_forward_SnapKV_ThinK, llama_flash_attn2_forward_SnapKV_AdaThinK
 
 from pyramidkv.mistral_model import mistral_flash_attn2_forward_AdaKV, mistral_flash_attn2_forward_HeadKV, mistral_flash_attn2_forward_PyramidKV,mistral_flash_attn2_forward_CAM,mistral_flash_attn2_forward_H2O,mistral_flash_attn2_forward_SnapKV,mistral_flash_attn2_forward_StreamingLLM, mistral_flash_attn2_forward_L2Norm
 from pyramidkv.mistral_model import mistral_attn_forward_PyramidKV,mistral_attn_forward_CAM,mistral_attn_forward_H2O,mistral_attn_forward_SnapKV,mistral_attn_forward_StreamingLLM, mistral_attn_forward_L2Norm
@@ -81,16 +81,18 @@ def replace_llama(method, model_name=None):
         print("Using Think!")
         transformers.models.llama.modeling_llama.LlamaModel.forward = think_model_forward
         transformers.models.llama.modeling_llama.LlamaAttention.forward = llama_attn_forward_SnapKV_ThinK
+        transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward = llama_flash_attn2_forward_SnapKV_ThinK
 
     elif method == "adathink":
         print("Using AdaThink!")
         transformers.models.llama.modeling_llama.LlamaModel.forward = adathink_model_forward
         transformers.models.llama.modeling_llama.LlamaAttention.forward = llama_attn_forward_SnapKV_AdaThinK
+        transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward = llama_flash_attn2_forward_SnapKV_AdaThinK
 
     elif method == "fullkv":
         print("Using FullKV!")
-        from pyramidkv.llama_model import fullkv_attn_forward
-        transformers.models.llama.modeling_llama.LlamaAttention.forward = fullkv_attn_forward
+        # from pyramidkv.llama_model import fullkv_attn_forward
+        # transformers.models.llama.modeling_llama.LlamaAttention.forward = fullkv_attn_forward
 
     if method not in ["fullkv"]:
         transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation = prepare_inputs_for_generation_llama_new

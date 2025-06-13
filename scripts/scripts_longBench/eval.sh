@@ -3,12 +3,28 @@ export CUDA_VISIBLE_DEVICES=$1
 method=$2 # Support PyramidKV, SnapKV, H2O, StreamingLLM, CAM, L2Norm, ThinK
 pruning_ratio=${3:-"0.4"} # Support 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9
 max_capacity_prompts=${4:-"512"} # 128,2048 in paper
-attn_implementation=eager # Support "flash_attention_2", "sdpa", "eager".
-source_path=results/
-model_path="meta-llama/Meta-Llama-3-8B-Instruct"
+
 
 input_length=${5:-"14000"} # Support 128, 512, 1024, 2048, 4096, 8192, 16384
 output_length=${6:-"338"} # Support 128, 512, 1024, 2048, 4096, 8192, 16384
+model=${7:-"llama3-8b-inst"}
+attn_implementation=${8:-"eager"} # Support "flash_attention_2", "sdpa", "eager".
+
+if [ "$model" = "llama3-8b-inst" ];then
+    model_path=meta-llama/Meta-Llama-3-8B-Instruct
+fi
+if [ "$model" = "llama3.1-8b-inst" ];then
+    model_path=meta-llama/Llama-3.1-8B-Instruct
+fi
+if [ "$model" = "lwm-1m" ];then
+    model_path=LargeWorldModel/LWM-Text-Chat-1M
+fi
+if [ "$model" = "llama2-7b-chat" ];then
+    model_path=meta-llama/Llama-2-7b-chat-hf
+fi
+
+source_path=results_dec/${model}/${attn_implementation}/
+
 # merge_method=$7 # Support "pivot"(LOOK-M_PivotMerge).
 # quant_method=$7 # Support kivi and kvquant, default None.
 # nbits=$8 # Quantization bit-width support 8,4,2. Need to set quant_method first.
