@@ -7,5 +7,5 @@ pip install -r requirements.txt
 ## profiler
 
 ```python
-bash pro.sh lwm-1m
+bash decode.sh lwm-1m
 ``` 
